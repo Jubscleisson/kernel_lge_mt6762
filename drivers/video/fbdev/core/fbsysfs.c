@@ -493,6 +493,51 @@ static ssize_t show_bl_curve(struct device *device,
 }
 #endif
 
+#ifdef CONFIG_LGE_DISPLAY_ESD_RECOVERY
+extern void LG_ESD_recovery(void);
+extern int get_esd_check_enable(void);
+extern void set_esd_check_enable(int enable);
+
+static ssize_t store_esd_recovery(struct device *device,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+  LG_ESD_recovery();
+
+  return count;
+}
+
+static ssize_t store_esd_check_enable(struct device *device,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+  int ret = 0;
+  char ** last = NULL;
+
+  ret = simple_strtoul(buf, last, 0);
+  set_esd_check_enable(ret);
+
+  return count;
+}
+
+static ssize_t show_esd_check_enable(struct device *device,
+			    struct device_attribute *attr, char *buf)
+{
+  int ret = 0;
+
+  ret = get_esd_check_enable();
+
+  return snprintf(buf, PAGE_SIZE, "ESD %s\n", (ret>0)? "enable":"disable");
+}
+#endif
+
+extern char mtkfb_lcm_name[];
+
+static ssize_t show_panel_type(struct device *device,struct device_attribute *attr, char *buf)
+{
+        return snprintf(buf, PAGE_SIZE, "%s\n", mtkfb_lcm_name);
+}
+
 /* When cmap is added back in it should be a binary attribute
  * not a text one. Consideration should also be given to converting
  * fbdev to use configfs instead of sysfs */
@@ -512,6 +557,11 @@ static struct device_attribute device_attrs[] = {
 #ifdef CONFIG_FB_BACKLIGHT
 	__ATTR(bl_curve, S_IRUGO|S_IWUSR, show_bl_curve, store_bl_curve),
 #endif
+#ifdef CONFIG_LGE_DISPLAY_ESD_RECOVERY
+  __ATTR(esd_check, S_IRUGO|S_IWUSR, show_esd_check_enable, store_esd_check_enable),
+  __ATTR(esd_recovery, S_IWUSR, NULL, store_esd_recovery),
+#endif
+  __ATTR(panel_type, S_IRUGO, show_panel_type, NULL)
 };
 
 int fb_init_device(struct fb_info *fb_info)

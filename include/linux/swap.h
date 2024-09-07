@@ -151,8 +151,10 @@ enum {
 	SWP_AREA_DISCARD = (1 << 8),	/* single-time swap area discards */
 	SWP_PAGE_DISCARD = (1 << 9),	/* freed swap page-cluster discards */
 	SWP_STABLE_WRITES = (1 << 10),	/* no overwrite PG_writeback pages */
+	SWP_SYNCHRONOUS_IO = (1 << 11),	/* synchronous IO is efficient */
+	SWP_FAST	= (1 << 12),	/* blkdev access is fast and cheap */
 					/* add others here before... */
-	SWP_SCANNING	= (1 << 11),	/* refcount in scan_swap_map */
+	SWP_SCANNING	= (1 << 13),	/* refcount in scan_swap_map */
 };
 
 #define SWAP_CLUSTER_MAX 32UL
@@ -292,7 +294,14 @@ extern unsigned long nr_free_pagecache_pages(void);
 
 
 /* linux/mm/swap.c */
+enum lru_cost_type {
+	COST_CPU,
+	COST_IO,
+};
+extern void lru_note_cost(struct lruvec *lruvec, enum lru_cost_type cost,
+			  bool file, unsigned int nr_pages);
 extern void lru_cache_add(struct page *);
+extern void lru_cache_putback(struct page *page);
 extern void lru_cache_add_anon(struct page *page);
 extern void lru_cache_add_file(struct page *page);
 extern void lru_add_page_tail(struct page *page, struct page *page_tail,
@@ -331,6 +340,12 @@ extern int vm_swappiness;
 extern int remove_mapping(struct address_space *mapping, struct page *page);
 extern unsigned long vm_total_pages;
 
+#ifdef CONFIG_MEMCG
+extern unsigned long vmpressure_win;
+extern unsigned int vmpressure_level_med;
+extern unsigned int vmpressure_level_critical;
+#endif
+
 #ifdef CONFIG_NUMA
 extern int node_reclaim_mode;
 extern int sysctl_min_unmapped_ratio;
@@ -353,7 +368,7 @@ extern void kswapd_stop(int nid);
 
 #ifdef CONFIG_SWAP
 /* linux/mm/page_io.c */
-extern int swap_readpage(struct page *);
+extern int swap_readpage(struct page *page, bool do_poll);
 extern int swap_writepage(struct page *page, struct writeback_control *wbc);
 extern void end_swap_bio_write(struct bio *bio);
 extern int __swap_writepage(struct page *page, struct writeback_control *wbc,
@@ -379,7 +394,8 @@ extern void free_page_and_swap_cache(struct page *);
 extern void free_pages_and_swap_cache(struct page **, int);
 extern struct page *lookup_swap_cache(swp_entry_t);
 extern struct page *read_swap_cache_async(swp_entry_t, gfp_t,
-			struct vm_area_struct *vma, unsigned long addr);
+			struct vm_area_struct *vma, unsigned long addr,
+			bool do_poll);
 extern struct page *__read_swap_cache_async(swp_entry_t, gfp_t,
 			struct vm_area_struct *vma, unsigned long addr,
 			bool *new_page_allocated);
@@ -389,10 +405,18 @@ extern struct page *swapin_readahead(swp_entry_t, gfp_t,
 /* linux/mm/swapfile.c */
 extern atomic_long_t nr_swap_pages;
 extern long total_swap_pages;
+extern bool is_swap_fast(swp_entry_t entry);
 
 /* Swap 50% full? Release swapcache more aggressively.. */
-static inline bool vm_swap_full(void)
+static inline bool vm_swap_full(struct swap_info_struct *si)
 {
+	/*
+	 * If the swap device is fast, return true
+	 * not to delay swap free.
+	 */
+	if (si->flags & SWP_FAST)
+		return true;
+
 	return atomic_long_read(&nr_swap_pages) * 2 < total_swap_pages;
 }
 
@@ -403,6 +427,10 @@ static inline long get_nr_swap_pages(void)
 
 extern void si_swapinfo(struct sysinfo *);
 extern swp_entry_t get_swap_page(void);
+#ifdef CONFIG_HSWAP
+extern unsigned long get_lowest_prio_swapper_space_nrpages(void);
+extern swp_entry_t get_lowest_prio_swap_page(void);
+#endif
 extern swp_entry_t get_swap_page_of_type(int);
 extern int add_swap_count_continuation(swp_entry_t, gfp_t);
 extern void swap_shmem_alloc(swp_entry_t);
@@ -416,19 +444,31 @@ extern unsigned int count_swap_pages(int, int);
 extern sector_t map_swap_page(struct page *, struct block_device **);
 extern sector_t swapdev_block(int, pgoff_t);
 extern int page_swapcount(struct page *);
+extern int __swap_count(struct swap_info_struct *si, swp_entry_t entry);
 extern int swp_swapcount(swp_entry_t entry);
 extern struct swap_info_struct *page_swap_info(struct page *);
+extern struct swap_info_struct *swp_swap_info(swp_entry_t entry);
 extern bool reuse_swap_page(struct page *, int *);
 extern int try_to_free_swap(struct page *);
 struct backing_dev_info;
 
 #else /* CONFIG_SWAP */
 
+static inline int swap_readpage(struct page *page, bool do_poll)
+{
+	return 0;
+}
+
+static inline struct swap_info_struct *swp_swap_info(swp_entry_t entry)
+{
+	return NULL;
+}
+
 #define swap_address_space(entry)		(NULL)
 #define get_nr_swap_pages()			0L
 #define total_swap_pages			0L
 #define total_swapcache_pages()			0UL
-#define vm_swap_full()				0
+#define vm_swap_full(si)			0
 
 #define si_swapinfo(val) \
 	do { (val)->freeswap = (val)->totalswap = 0; } while (0)
@@ -508,6 +548,11 @@ static inline int page_swapcount(struct page *page)
 	return 0;
 }
 
+static inline int __swap_count(struct swap_info_struct *si, swp_entry_t entry)
+{
+	return 0;
+}
+
 static inline int swp_swapcount(swp_entry_t entry)
 {
 	return 0;
@@ -579,7 +624,7 @@ static inline long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 
 static inline bool mem_cgroup_swap_full(struct page *page)
 {
-	return vm_swap_full();
+	return vm_swap_full(page_swap_info(page));
 }
 #endif
 

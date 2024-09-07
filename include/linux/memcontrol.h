@@ -56,6 +56,9 @@ enum mem_cgroup_stat_index {
 	MEMCG_SLAB_RECLAIMABLE,
 	MEMCG_SLAB_UNRECLAIMABLE,
 	MEMCG_SOCK,
+	MEMCG_WORKINGSET_REFAULT,
+	MEMCG_WORKINGSET_ACTIVATE,
+	MEMCG_WORKINGSET_NODERECLAIM,
 	MEMCG_NR_STAT,
 };
 
@@ -494,6 +497,21 @@ struct mem_cgroup *lock_page_memcg(struct page *page);
 void __unlock_page_memcg(struct mem_cgroup *memcg);
 void unlock_page_memcg(struct page *page);
 
+static inline unsigned long mem_cgroup_read_stat(struct mem_cgroup *memcg,
+						 enum mem_cgroup_stat_index idx)
+{
+	long val = 0;
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		val += per_cpu(memcg->stat->count[idx], cpu);
+
+	if (val < 0)
+		val = 0;
+
+	return val;
+}
+
 /**
  * mem_cgroup_update_page_stat - update page state statistics
  * @page: the page
@@ -508,6 +526,8 @@ void unlock_page_memcg(struct page *page);
  *   if (TestClearPageState(page))
  *     mem_cgroup_update_page_stat(page, state, -1);
  *   unlock_page(page) or unlock_page_memcg(page)
+ *
+ * Kernel pages are an exception to this, since they'll never move.
  */
 static inline void mem_cgroup_update_page_stat(struct page *page,
 				 enum mem_cgroup_stat_index idx, int val)
@@ -766,6 +786,27 @@ static inline bool mem_cgroup_oom_synchronize(bool wait)
 	return false;
 }
 
+static inline unsigned long mem_cgroup_read_stat(struct mem_cgroup *memcg,
+						 enum mem_cgroup_stat_index idx)
+{
+	return 0;
+}
+
+static inline void mem_cgroup_update_stat(struct mem_cgroup *memcg,
+				   enum mem_cgroup_stat_index idx, int val)
+{
+}
+
+static inline void mem_cgroup_inc_stat(struct mem_cgroup *memcg,
+				   enum mem_cgroup_stat_index idx)
+{
+}
+
+static inline void mem_cgroup_dec_stat(struct mem_cgroup *memcg,
+				   enum mem_cgroup_stat_index idx)
+{
+}
+
 static inline void mem_cgroup_update_page_stat(struct page *page,
 					       enum mem_cgroup_stat_index idx,
 					       int nr)
@@ -799,10 +840,6 @@ void mem_cgroup_count_vm_event(struct mm_struct *mm, enum vm_event_item idx)
 {
 }
 
-static inline void mem_cgroup_dec_stat(struct mem_cgroup *memcg,
-					    enum mem_cgroup_stat_index idx)
-{
-}
 #endif /* CONFIG_MEMCG */
 
 #ifdef CONFIG_CGROUP_WRITEBACK

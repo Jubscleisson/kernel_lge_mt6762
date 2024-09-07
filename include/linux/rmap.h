@@ -1,3 +1,16 @@
+/*
+ * Copyright (C) 2019 MediaTek Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
+
 #ifndef _LINUX_RMAP_H
 #define _LINUX_RMAP_H
 /*
@@ -10,6 +23,13 @@
 #include <linux/rwsem.h>
 #include <linux/memcontrol.h>
 
+extern int isolate_lru_page(struct page *page);
+#ifdef CONFIG_PROCESS_RECLAIM
+extern int isolate_evictable_lru_page(struct page *page);
+#endif
+extern void putback_lru_page(struct page *page);
+extern unsigned long reclaim_pages(struct list_head *page_list,
+						struct vm_area_struct *vma);
 /*
  * The anon_vma heads a list of private "related" vmas, to scan if
  * an anonymous page pointing to this anon_vma needs to be unmapped:
@@ -186,7 +206,8 @@ int page_referenced(struct page *, int is_locked,
 
 #define TTU_ACTION(x) ((x) & TTU_ACTION_MASK)
 
-int try_to_unmap(struct page *, enum ttu_flags flags);
+int try_to_unmap(struct page *, enum ttu_flags flags,
+			struct vm_area_struct *vma);
 
 /*
  * Used by uprobes to replace a userspace page safely
@@ -263,6 +284,7 @@ int page_mapped_in_vma(struct page *page, struct vm_area_struct *vma);
  */
 struct rmap_walk_control {
 	void *arg;
+	struct vm_area_struct *target_vma;
 	int (*rmap_one)(struct page *page, struct vm_area_struct *vma,
 					unsigned long addr, void *arg);
 	int (*done)(struct page *page);
@@ -286,8 +308,11 @@ static inline int page_referenced(struct page *page, int is_locked,
 	*vm_flags = 0;
 	return 0;
 }
-
+#ifdef CONFIG_HSWAP
 #define try_to_unmap(page, refs) SWAP_FAIL
+#elsf
+#define try_to_unmap(page, refs, vma) SWAP_FAIL
+#endif
 
 static inline int page_mkclean(struct page *page)
 {

@@ -512,8 +512,14 @@ static int reg_query_builtin(const char *alpha2)
 /* Feel free to add any other sanity checks here */
 static void reg_regdb_size_check(void)
 {
+#ifdef CONFIG_MACH_LGE
+	if ( !reg_regdb_size ) {
+		printk (KERN_WARNING "db.txt is empty, you should update it...");
+	}
+#else
 	/* We should ideally BUILD_BUG_ON() but then random builds would fail */
 	WARN_ONCE(!reg_regdb_size, "db.txt is empty, you should update it...");
+#endif
 }
 #else
 static inline void reg_regdb_size_check(void) {}

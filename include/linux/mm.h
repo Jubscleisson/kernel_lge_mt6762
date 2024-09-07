@@ -1155,6 +1155,8 @@ extern void pagefault_out_of_memory(void);
 
 extern void show_free_areas(unsigned int flags);
 extern bool skip_free_areas_node(unsigned int flags, int nid);
+extern void show_task_mem(void);
+extern void oom_dump_extra_info(void);
 
 void shmem_set_file(struct vm_area_struct *vma, struct file *file);
 int shmem_zero_setup(struct vm_area_struct *);
@@ -2512,5 +2514,20 @@ void __init setup_nr_node_ids(void);
 static inline void setup_nr_node_ids(void) {}
 #endif
 
+#ifdef CONFIG_PROCESS_RECLAIM
+struct reclaim_param {
+	struct vm_area_struct *vma;
+	/* Number of pages scanned */
+	int nr_scanned;
+	/* max pages to reclaim */
+	int nr_to_reclaim;
+	/* pages reclaimed */
+	int nr_reclaimed;
+};
+extern struct reclaim_param reclaim_task_anon(struct task_struct *task,
+		int nr_to_reclaim);
+extern struct reclaim_param reclaim_task_file_anon(struct task_struct *task,
+		int nr_to_reclaim);
+#endif
 #endif /* __KERNEL__ */
 #endif /* _LINUX_MM_H */

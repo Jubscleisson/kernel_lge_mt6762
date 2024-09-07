@@ -46,6 +46,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 {
 	struct sysinfo i;
 	unsigned long committed;
+	struct vmalloc_info vmi;
 	long cached;
 	long available;
 	unsigned long pages[NR_LRU_LISTS];
@@ -59,6 +60,8 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 			total_swapcache_pages() - i.bufferram;
 	if (cached < 0)
 		cached = 0;
+
+	get_vmalloc_info(&vmi);
 
 	for (lru = LRU_BASE; lru < NR_LRU_LISTS; lru++)
 		pages[lru] = global_node_page_state(NR_LRU_BASE + lru);
@@ -131,8 +134,15 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	show_val_kb(m, "Committed_AS:   ", committed);
 	seq_printf(m, "VmallocTotal:   %8lu kB\n",
 		   (unsigned long)VMALLOC_TOTAL >> 10);
+#ifndef Vmalloc
+	seq_printf(m, "VmallocUsed:    %8lu kB\n",
+		   vmi.used >> 10);
+	seq_printf(m, "VmallocChunk:   %8lu kB\n",
+		   vmi.largest_chunk >> 10);
+#else /* QCT Original*/
 	show_val_kb(m, "VmallocUsed:    ", 0ul);
 	show_val_kb(m, "VmallocChunk:   ", 0ul);
+#endif
 
 #ifdef CONFIG_MEMORY_FAILURE
 	seq_printf(m, "HardwareCorrupted: %5lu kB\n",

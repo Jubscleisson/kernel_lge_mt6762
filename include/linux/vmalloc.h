@@ -82,6 +82,7 @@ extern void *__vmalloc_node_range(unsigned long size, unsigned long align,
 			const void *caller);
 
 extern void vfree(const void *addr);
+extern void vfree_atomic(const void *addr);
 
 extern void *vmap(struct page **pages, unsigned int count,
 			unsigned long flags, pgprot_t prot);
@@ -183,10 +184,21 @@ pcpu_free_vm_areas(struct vm_struct **vms, int nr_vms)
 # endif
 #endif
 
+struct vmalloc_info {
+	unsigned long   used;
+	unsigned long   largest_chunk;
+};
+
 #ifdef CONFIG_MMU
 #define VMALLOC_TOTAL (VMALLOC_END - VMALLOC_START)
+extern void get_vmalloc_info(struct vmalloc_info *vmi);
 #else
 #define VMALLOC_TOTAL 0UL
+#define get_vmalloc_info(vmi)			\
+do {						\
+	(vmi)->used = 0;			\
+	(vmi)->largest_chunk = 0;		\
+} while (0)
 #endif
 
 int register_vmap_purge_notifier(struct notifier_block *nb);

@@ -25,6 +25,8 @@ HOSTCFLAGS_sortextable.o = -I$(srctree)/tools/include
 HOSTCFLAGS_asn1_compiler.o = -I$(srctree)/include
 HOSTLOADLIBES_sign-file = -lcrypto
 HOSTLOADLIBES_extract-cert = -lcrypto
+HOSTCFLAGS += -I/usr/include -I/usr/include/x86_64-linux-gnu -L/usr/lib -L/usr/lib/x86_64-linux-gnu
+HOSTLDFLAGS += -L/usr/lib -L/usr/lib/x86_64-linux-gnu
 
 always		:= $(hostprogs-y) $(hostprogs-m)
 

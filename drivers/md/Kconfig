@@ -250,6 +250,15 @@ config DM_DEBUG_BLOCK_STACK_TRACING
 
 	 If unsure, say N.
 
+config DM_BUFIO_CACHE_SIZE_PER_CLIENT
+	int "Set the static dm-bufio cache size per client"
+	default "0"
+	depends on DM_BUFIO
+	---help---
+	  This value is the static cache size per client.
+	  As increase clients to use dm bufio, cache size per each is reduced.
+	  If clients will be added more, consider to tune this value.
+
 config DM_BIO_PRISON
        tristate
        depends on BLK_DEV_DM
@@ -500,6 +509,16 @@ config DM_LOG_WRITES
 	  be called dm-log-writes.
 
 	  If unsure, say N.
+
+config MTK_HW_FDE
+	tristate "Mediatek HW FDE support"
+        depends on DM_CRYPT
+	---help---
+	  This selects the MediaTek(R) crypto engine for Full Disk Encryption.
+          This device-mapper target allows you to create a device that
+          transparently encrypts the data on it.
+
+	  If you have a machine with a MTK crypto engine for FDE, say Y here.
 
 config DM_VERITY_AVB
 	tristate "Support AVB specific verity error behavior"

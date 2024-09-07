@@ -45,11 +45,12 @@ static ssize_t power_supply_show_property(struct device *dev,
 					  char *buf) {
 	static char *type_text[] = {
 		"Unknown", "Battery", "UPS", "Mains", "USB",
-		"USB_DCP", "USB_CDP", "USB_ACA", "USB_C",
+		"USB_DCP", "USB_CDP", "USB_ACA", "Wireless", "USB_C",
 		"USB_PD", "USB_PD_DRP"
 	};
 	static char *status_text[] = {
-		"Unknown", "Charging", "Discharging", "Not charging", "Full"
+		"Unknown", "Charging", "Discharging", "Not charging", "Full",
+		"Cmd discharging"
 	};
 	static char *charge_type[] = {
 		"Unknown", "N/A", "Trickle", "Fast"
@@ -207,9 +208,48 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(charge_enabled),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
+#ifdef CONFIG_LGE_PM
+	POWER_SUPPLY_ATTR(battery_charging_enabled),
+	POWER_SUPPLY_ATTR(charging_enabled),
+	POWER_SUPPLY_ATTR(fastchg),
+	POWER_SUPPLY_ATTR(fastchg_support),
+	POWER_SUPPLY_ATTR(first_soc_est_done),
+	POWER_SUPPLY_ATTR(incompatible_chg),
+	POWER_SUPPLY_ATTR(raw_capacity),
+	POWER_SUPPLY_ATTR(ttf_capacity),
+	POWER_SUPPLY_ATTR(typec),
+#endif
+#ifdef CONFIG_LGE_PM_CHARGER_CONTROLLER
+	POWER_SUPPLY_ATTR(usb_current_max),
+	POWER_SUPPLY_ATTR(store_demo_enabled),
+	POWER_SUPPLY_ATTR(ccd_icl),
+	POWER_SUPPLY_ATTR(ccd_fcc),
+	POWER_SUPPLY_ATTR(ccd_vfloat),
+	POWER_SUPPLY_ATTR(vzw_chg),
+#endif
+#ifdef CONFIG_LGE_PM_BATTERY_ID
+	POWER_SUPPLY_ATTR(batt_id),
+	POWER_SUPPLY_ATTR(valid_batt_id),
+	POWER_SUPPLY_ATTR(check_batt_id_for_aat),
+#endif
+#ifdef CONFIG_LGE_PM_BATTERY_CYCLE
+	POWER_SUPPLY_ATTR(battery_cycle),
+#endif
+#ifdef CONFIG_LGE_PM_BATTERY_AGING_FACTOR
+	POWER_SUPPLY_ATTR(battery_age),
+	POWER_SUPPLY_ATTR(battery_age_level),
+	POWER_SUPPLY_ATTR(battery_condition),
+#endif
+#ifdef CONFIG_LGE_PM_QNOVO_QNS
+	POWER_SUPPLY_ATTR(qns_fcc),
+	POWER_SUPPLY_ATTR(qns_vfloat),
+#endif
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),
+#ifdef CONFIG_LGE_PM_BATTERY_ID
+	POWER_SUPPLY_ATTR(battery_type),
+#endif
 	POWER_SUPPLY_ATTR(serial_number),
 };
 

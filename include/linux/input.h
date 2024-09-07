@@ -11,6 +11,9 @@
 #include <linux/time.h>
 #include <linux/list.h>
 #include <uapi/linux/input.h>
+#ifdef CONFIG_LGE_HANDLE_PANIC
+#include <soc/mediatek/lge/lge_handle_panic.h>
+#endif
 /* Implementation details, userspace should not care about these */
 #define ABS_MT_FIRST		ABS_MT_TOUCH_MAJOR
 #define ABS_MT_LAST		ABS_MT_TOOL_Y
@@ -386,6 +389,21 @@ void input_inject_event(struct input_handle *handle, unsigned int type, unsigned
 
 static inline void input_report_key(struct input_dev *dev, unsigned int code, int value)
 {
+#ifdef CONFIG_MACH_LGE
+	if (code == KEY_VOLUMEDOWN)
+		printk("KEY_VOLUME_DOWN is pressed! status=%d\n", value);
+	if (code == KEY_VOLUMEUP)
+		printk("KEY_VOLUME_UP is pressed! status=%d\n", value);
+	if (code == KEY_POWER)
+		printk("KEY_POWER is pressed! status=%d\n", value);
+	if (code == 377) /* STB_POWER == AI Key */
+		printk("KEY_AI is pressed! status=%d\n", value);
+#endif /* CONFIG_MACH_LGE */
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	if (code == KEY_VOLUMEDOWN || code == KEY_VOLUMEUP || code == KEY_POWER) {
+		lge_gen_key_panic(code, value);
+	}
+#endif
 	input_event(dev, EV_KEY, code, !!value);
 }
 

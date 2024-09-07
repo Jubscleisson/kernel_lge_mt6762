@@ -36,6 +36,9 @@
 #include <linux/user_namespace.h>
 #include "internal.h"
 
+#if defined(CONFIG_LGE_HANDLE_PANIC)
+static int emergency_remount_state = 0;
+#endif
 
 static LIST_HEAD(super_blocks);
 static DEFINE_SPINLOCK(sb_lock);
@@ -427,6 +430,7 @@ bool trylock_super(struct super_block *sb)
 void generic_shutdown_super(struct super_block *sb)
 {
 	const struct super_operations *sop = sb->s_op;
+	struct inode *inode;
 
 	if (sb->s_root) {
 		shrink_dcache_for_umount(sb);
@@ -450,6 +454,13 @@ void generic_shutdown_super(struct super_block *sb)
 			printk("VFS: Busy inodes after unmount of %s. "
 			   "Self-destruct in 5 seconds.  Have a nice day...\n",
 			   sb->s_id);
+			if (sb->s_inodes.next != NULL) {
+				inode = container_of(sb->s_inodes.next,
+					struct inode, i_sb_list);
+				if (inode != NULL)
+					pr_debug("VFS: inode=0x%p, ino=%d\n",
+						inode, inode->i_ino);
+			}
 		}
 	}
 	spin_lock(&sb_lock);
@@ -863,6 +874,20 @@ cancel_readonly:
 	return retval;
 }
 
+#if defined(CONFIG_LGE_HANDLE_PANIC)
+int get_emergency_remount_state(void)
+{
+	return emergency_remount_state;
+}
+EXPORT_SYMBOL(get_emergency_remount_state);
+
+void set_emergency_remount_state(int flag)
+{
+	emergency_remount_state = flag;
+}
+EXPORT_SYMBOL(set_emergency_remount_state);
+#endif
+
 int do_remount_sb(struct super_block *sb, int flags, void *data, int force)
 {
 	return do_remount_sb2(NULL, sb, flags, data, force);
@@ -894,6 +919,10 @@ static void do_emergency_remount(struct work_struct *work)
 	}
 	if (p)
 		__put_super(p);
+
+#if defined(CONFIG_LGE_HANDLE_PANIC)
+	set_emergency_remount_state(1);
+#endif
 	spin_unlock(&sb_lock);
 	kfree(work);
 	printk("Emergency Remount complete\n");
@@ -1044,7 +1073,7 @@ static int set_bdev_super(struct super_block *s, void *data)
 	 * We set the bdi here to the queue backing, file systems can
 	 * overwrite this in ->fill_super()
 	 */
-	s->s_bdi = &bdev_get_queue(s->s_bdev)->backing_dev_info;
+	s->s_bdi = bdev_get_queue(s->s_bdev)->backing_dev_info;
 	return 0;
 }
 

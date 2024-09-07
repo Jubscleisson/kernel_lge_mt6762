@@ -1,3 +1,8 @@
+subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include
+
+ifeq ($(CONFIG_MTK_AUXADC),y)
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/auxadc/
+endif
 snd-soc-88pm860x-objs := 88pm860x-codec.o
 snd-soc-ab8500-codec-objs := ab8500-codec.o
 snd-soc-ac97-objs := ac97.o
@@ -26,6 +31,7 @@ snd-soc-adav801-objs := adav801.o
 snd-soc-adav803-objs := adav803.o
 snd-soc-ads117x-objs := ads117x.o
 snd-soc-ak4104-objs := ak4104.o
+snd-soc-ak4376-objs := ak4376.o
 snd-soc-ak4535-objs := ak4535.o
 snd-soc-ak4554-objs := ak4554.o
 snd-soc-ak4613-objs := ak4613.o
@@ -64,6 +70,7 @@ snd-soc-dmic-objs := dmic.o
 snd-soc-es8328-objs := es8328.o
 snd-soc-es8328-i2c-objs := es8328-i2c.o
 snd-soc-es8328-spi-objs := es8328-spi.o
+snd-soc-es9218p-objs := es9218p.o
 snd-soc-gtm601-objs := gtm601.o
 snd-soc-hdac-hdmi-objs := hdac_hdmi.o
 snd-soc-ics43432-objs := ics43432.o
@@ -85,7 +92,10 @@ snd-soc-max98926-objs := max98926.o
 snd-soc-max9850-objs := max9850.o
 snd-soc-max9860-objs := max9860.o
 snd-soc-mc13783-objs := mc13783.o
+snd-soc-mt6358-objs := mt6358.o
+snd-soc-mt6359-objs := mt6359.o
 snd-soc-ml26124-objs := ml26124.o
+snd-soc-mt6391-objs := mt6391.o
 snd-soc-nau8810-objs := nau8810.o
 snd-soc-nau8825-objs := nau8825.o
 snd-soc-hdmi-codec-objs := hdmi-codec.o
@@ -214,8 +224,10 @@ snd-soc-wm9705-objs := wm9705.o
 snd-soc-wm9712-objs := wm9712.o
 snd-soc-wm9713-objs := wm9713.o
 snd-soc-wm-hubs-objs := wm_hubs.o
+snd-soc-rt5509-objs := rt5509.o rt5509-regmap.o rt5509-calib.o
 
 # Amp
+snd-soc-mt6660-objs := mt6660.o mt6660-regmap.o mt6660-param.o
 snd-soc-max9877-objs := max9877.o
 snd-soc-max98504-objs := max98504.o
 snd-soc-tpa6130a2-objs := tpa6130a2.o
@@ -249,6 +261,7 @@ obj-$(CONFIG_SND_SOC_ADAV801)  += snd-soc-adav801.o
 obj-$(CONFIG_SND_SOC_ADAV803)  += snd-soc-adav803.o
 obj-$(CONFIG_SND_SOC_ADS117X)	+= snd-soc-ads117x.o
 obj-$(CONFIG_SND_SOC_AK4104)	+= snd-soc-ak4104.o
+obj-$(CONFIG_SND_SOC_AK4376)   += snd-soc-ak4376.o
 obj-$(CONFIG_SND_SOC_AK4535)	+= snd-soc-ak4535.o
 obj-$(CONFIG_SND_SOC_AK4554)	+= snd-soc-ak4554.o
 obj-$(CONFIG_SND_SOC_AK4613)	+= snd-soc-ak4613.o
@@ -289,6 +302,7 @@ obj-$(CONFIG_SND_SOC_DMIC)	+= snd-soc-dmic.o
 obj-$(CONFIG_SND_SOC_ES8328)	+= snd-soc-es8328.o
 obj-$(CONFIG_SND_SOC_ES8328_I2C)+= snd-soc-es8328-i2c.o
 obj-$(CONFIG_SND_SOC_ES8328_SPI)+= snd-soc-es8328-spi.o
+obj-$(CONFIG_SND_SOC_ES9218P)	+= snd-soc-es9218p.o
 obj-$(CONFIG_SND_SOC_GTM601)    += snd-soc-gtm601.o
 obj-$(CONFIG_SND_SOC_HDAC_HDMI) += snd-soc-hdac-hdmi.o
 obj-$(CONFIG_SND_SOC_ICS43432)	+= snd-soc-ics43432.o
@@ -310,6 +324,9 @@ obj-$(CONFIG_SND_SOC_MAX9850)	+= snd-soc-max9850.o
 obj-$(CONFIG_SND_SOC_MAX9860)	+= snd-soc-max9860.o
 obj-$(CONFIG_SND_SOC_MC13783)	+= snd-soc-mc13783.o
 obj-$(CONFIG_SND_SOC_ML26124)	+= snd-soc-ml26124.o
+obj-$(CONFIG_SND_SOC_MT6358)	+= snd-soc-mt6358.o
+obj-$(CONFIG_SND_SOC_MT6359)	+= snd-soc-mt6359.o
+obj-$(CONFIG_SND_SOC_MT6391)	+= snd-soc-mt6391.o
 obj-$(CONFIG_SND_SOC_NAU8810)   += snd-soc-nau8810.o
 obj-$(CONFIG_SND_SOC_NAU8825)   += snd-soc-nau8825.o
 obj-$(CONFIG_SND_SOC_HDMI_CODEC)	+= snd-soc-hdmi-codec.o
@@ -435,8 +452,31 @@ obj-$(CONFIG_SND_SOC_WM9712)	+= snd-soc-wm9712.o
 obj-$(CONFIG_SND_SOC_WM9713)	+= snd-soc-wm9713.o
 obj-$(CONFIG_SND_SOC_WM_ADSP)	+= snd-soc-wm-adsp.o
 obj-$(CONFIG_SND_SOC_WM_HUBS)	+= snd-soc-wm-hubs.o
+obj-$(CONFIG_SND_SOC_MT2701)	+= mt2712-codec.o
+obj-$(CONFIG_SND_SMARTPA_AW8898)+= aw8898.o
+obj-$(CONFIG_SND_SOC_AW87349) += aw87349_audio.o
+obj-$(CONFIG_SND_SOC_AW87529) += aw87529_audio.o
 
 # Amp
 obj-$(CONFIG_SND_SOC_MAX9877)	+= snd-soc-max9877.o
 obj-$(CONFIG_SND_SOC_MAX98504)	+= snd-soc-max98504.o
 obj-$(CONFIG_SND_SOC_TPA6130A2)	+= snd-soc-tpa6130a2.o
+obj-$(CONFIG_SND_SOC_RT5509)	+= snd-soc-rt5509.o
+obj-$(CONFIG_SND_SOC_MT6660)	+= snd-soc-mt6660.o
+obj-$(CONFIG_SND_SOC_CS35L41)	+= cirrus/
+
+obj-$(CONFIG_SND_SOC_TAS2563)	+= ti/
+
+obj-$(CONFIG_SND_SOC_FS16XX)    += foursemi/
+
+ifeq ($(CONFIG_SND_SOC_MT6358),y)
+  MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
+  subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$(MTK_PLATFORM)/include
+  subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/accdet/mt6358
+endif
+
+ifeq ($(CONFIG_SND_SOC_MT6359),y)
+  MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
+  subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$(MTK_PLATFORM)/include
+  subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/accdet/mt6359
+endif

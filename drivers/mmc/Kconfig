@@ -19,6 +19,13 @@ config MMC_DEBUG
 	  This is an option for use by developers; most people should
 	  say N here.  This enables MMC core and driver debugging.
 
+config LGE_TRAY_EVENT
+	bool "Show SD Card Detect pin status"
+	depends on MACH_LGE
+	default y
+	help
+	Support the uevent for SD Card TRAY status.
+
 if MMC
 
 source "drivers/mmc/core/Kconfig"

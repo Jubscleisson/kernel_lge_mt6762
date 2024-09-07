@@ -967,6 +967,26 @@ else
 DTB_LIST := $(dtb-y)
 endif
 
+ifeq ($(findstring lge,$(CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE_NAMES)),lge)
+$(info use lge dts from $(CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE_NAMES))
+LGE_DTS_DIR := $(subst $\",,$(CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE_NAMES))/
+LGE_DTS_FILES := $(notdir $(basename $(wildcard $(srctree)/arch/arm/boot/dts/$(LGE_DTS_DIR)*.dts)))
+LGE_DTS_PATH_FILES := $(addprefix $(LGE_DTS_DIR), $(LGE_DTS_FILES))
+$(info add lge dtbs: $(LGE_DTS_FILES))
+DTB_LIST += $(addsuffix .dtb, $(LGE_DTS_PATH_FILES))
+else ifeq ($(findstring jdm,$(CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE_NAMES)),jdm)
+$(info use jdm dts from $(CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE_NAMES))
+JDM_DTS_DIR := $(subst $\",,$(CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE_NAMES))/
+JDM_DTS_FILES := $(notdir $(basename $(wildcard $(srctree)/arch/arm/boot/dts/$(JDM_DTS_DIR)*.dts)))
+JDM_DTS_PATH_FILES := $(addprefix $(JDM_DTS_DIR), $(JDM_DTS_FILES))
+$(info add jdm dtbs: $(JDM_DTS_FILES))
+DTB_LIST += $(addsuffix .dtb, $(JDM_DTS_PATH_FILES))
+else
+ifeq ($(strip $(CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE)), y)
+DTB_LIST += $(addsuffix .dtb, $(subst $\",,$(CONFIG_BUILD_ARM_DTB_OVERLAY_IMAGE_NAMES)))
+endif
+endif
+
 targets += dtbs dtbs_install
 targets += $(DTB_LIST)
 

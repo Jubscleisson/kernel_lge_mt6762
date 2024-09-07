@@ -57,5 +57,7 @@ struct mtp_event {
  * with a 12 byte MTP data packet header at the beginning.
  */
 #define MTP_SEND_FILE_WITH_HEADER  _IOW('M', 4, struct mtp_file_range)
-
+#ifdef CONFIG_LGE_USB
+#define MTP_RECEIVE_CANCEL_EVENT   _IOW('M', 5, struct mtp_event)
+#endif
 #endif /* _UAPI_LINUX_USB_F_MTP_H */

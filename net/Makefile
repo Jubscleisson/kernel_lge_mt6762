@@ -81,3 +81,7 @@ obj-y				+= l3mdev/
 endif
 obj-$(CONFIG_QRTR)		+= qrtr/
 obj-$(CONFIG_NET_NCSI)		+= ncsi/
+# 2018-01-25 ickjun.kim@lge.com LGP_DATA_ENV_PATCHCODEID [START] */
+#This API is only for checking patch code ID.
+obj-y                       += patchcodeid.o
+# 2018-01-25 ickjun.kim@lge.com LGP_DATA_ENV_PATCHCODEID [END] */

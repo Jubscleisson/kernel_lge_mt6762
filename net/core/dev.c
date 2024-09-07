@@ -144,6 +144,8 @@
 
 #include "net-sysfs.h"
 
+#include <net/patchcodeid.h>
+
 /* Instead of increasing this, you should create a hash table. */
 #define MAX_GRO_SKBS 8
 
@@ -6615,6 +6617,28 @@ int dev_set_mtu(struct net_device *dev, int new_mtu)
 		return err;
 
 	orig_mtu = dev->mtu;
+
+	/* 2018-11-13 bongsook.jeong@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [START] */
+	//MH4 (mt6762 omr1 ) : To keep the MTU value received from the RA, as you can call this function from some module, like calling dev_set_mtu in ifconfig modue.
+	//when dev_set_mtu() is called,  mtu is set with RA messsage.  for U+/KT
+	if ((sysctl_lge_carrier == 45006 || sysctl_lge_carrier == 45008) && (strncmp(dev->name, "ccmni", 5) == 0)) {
+		struct inet6_dev *in6_dev = in6_dev_get(dev);
+		__u32 RXED_MTU = IF_RA_RCVD | IF_RS_SENT | IF_READY;
+
+		patch_code_id("LPCP-1932@y@m@vmlinux@dev.c@1");
+		if (in6_dev) {
+			//printk("[LGE_DATA][IPv6]dev_set_mtu in6_dev->if_flags 0x%x device %s, sysctl_lge_carrier = %d, RXED_MTU 0x%x\n",in6_dev->if_flags ,dev->name,sysctl_lge_carrier,RXED_MTU );
+
+			if ((in6_dev->if_flags == RXED_MTU) && (in6_dev->cnf.mtu6 >= IPV6_MIN_MTU)) {
+				printk("dev_set_mtu orig_mtu %d, new_mtu %d change new mtu %d,\n",orig_mtu, new_mtu,in6_dev->cnf.mtu6);
+				new_mtu = in6_dev->cnf.mtu6;
+			}
+
+			in6_dev_put(in6_dev);
+		}
+	}
+	/* 2018-11-13 bongsook.jeong@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [END] */
+
 	err = __dev_set_mtu(dev, new_mtu);
 
 	if (!err) {

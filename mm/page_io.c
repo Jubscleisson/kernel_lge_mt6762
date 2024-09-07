@@ -117,6 +117,7 @@ static void swap_slot_free_notify(struct page *page)
 static void end_swap_bio_read(struct bio *bio)
 {
 	struct page *page = bio->bi_io_vec[0].bv_page;
+	struct task_struct *waiter = bio->bi_private;
 
 	if (bio->bi_error) {
 		SetPageError(page);
@@ -132,7 +133,9 @@ static void end_swap_bio_read(struct bio *bio)
 	swap_slot_free_notify(page);
 out:
 	unlock_page(page);
+	WRITE_ONCE(bio->bi_private, NULL);
 	bio_put(bio);
+	wake_up_process(waiter);
 }
 
 int generic_swapfile_activate(struct swap_info_struct *sis,
@@ -284,6 +287,7 @@ int __swap_writepage(struct page *page, struct writeback_control *wbc,
 		unlock_page(page);
 		ret = mapping->a_ops->direct_IO(&kiocb, &from);
 		if (ret == PAGE_SIZE) {
+			current->swap_out++;
 			count_vm_event(PSWPOUT);
 			ret = 0;
 		} else {
@@ -308,6 +312,7 @@ int __swap_writepage(struct page *page, struct writeback_control *wbc,
 
 	ret = bdev_write_page(sis->bdev, swap_page_sector(page), page, wbc);
 	if (!ret) {
+		current->swap_out++;
 		count_vm_event(PSWPOUT);
 		return 0;
 	}
@@ -324,6 +329,8 @@ int __swap_writepage(struct page *page, struct writeback_control *wbc,
 		bio_set_op_attrs(bio, REQ_OP_WRITE, REQ_SYNC);
 	else
 		bio_set_op_attrs(bio, REQ_OP_WRITE, 0);
+
+	current->swap_out++;
 	count_vm_event(PSWPOUT);
 	set_page_writeback(page);
 	unlock_page(page);
@@ -332,13 +339,15 @@ out:
 	return ret;
 }
 
-int swap_readpage(struct page *page)
+int swap_readpage(struct page *page, bool synchronous)
 {
 	struct bio *bio;
 	int ret = 0;
 	struct swap_info_struct *sis = page_swap_info(page);
+	blk_qc_t qc;
+	struct block_device *bdev;
 
-	VM_BUG_ON_PAGE(!PageSwapCache(page), page);
+	VM_BUG_ON_PAGE(!PageSwapCache(page) && !synchronous, page);
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(PageUptodate(page), page);
 	if (frontswap_load(page) == 0) {
@@ -375,9 +384,23 @@ int swap_readpage(struct page *page)
 		ret = -ENOMEM;
 		goto out;
 	}
+	bdev = bio->bi_bdev;
+	bio->bi_private = current;
 	bio_set_op_attrs(bio, REQ_OP_READ, 0);
 	count_vm_event(PSWPIN);
-	submit_bio(bio);
+	bio_get(bio);
+	qc = submit_bio(bio);
+	while (synchronous) {
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		if (!READ_ONCE(bio->bi_private))
+			break;
+
+		if (!blk_poll(bdev_get_queue(bdev), qc))
+			break;
+	}
+	__set_current_state(TASK_RUNNING);
+	bio_put(bio);
+
 out:
 	return ret;
 }

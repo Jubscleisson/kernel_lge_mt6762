@@ -1388,3 +1388,18 @@ u64 snd_usb_interface_dsd_format_quirks(struct snd_usb_audio *chip,
 
 	return 0;
 }
+
+bool snd_usb_support_autosuspend_quirk(struct usb_device *dev)
+{
+	struct snd_usb_audio *chip = dev_get_drvdata(&dev->dev);
+
+	if (!chip)
+		return false;
+
+	switch (chip->usb_id) {
+	case USB_ID(0x1963, 0x0020):
+		dev_info(&dev->dev, "snd device not support autosuspend");
+		return false;
+	}
+	return true;
+}

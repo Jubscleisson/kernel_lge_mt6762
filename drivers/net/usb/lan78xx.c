@@ -859,7 +859,7 @@ static int lan78xx_write_raw_otp(struct lan78xx_net *dev, u32 offset,
 	return 0;
 }
 
-static int lan78xx_read_otp(struct lan78xx_net *dev, u32 offset,
+static int lan78xx_read_otp(struct lan78xx_net *dev, u64 offset,
 			    u32 length, u8 *data)
 {
 	u8 sig;
@@ -869,7 +869,8 @@ static int lan78xx_read_otp(struct lan78xx_net *dev, u32 offset,
 
 	if (ret == 0) {
 		if (sig == OTP_INDICATOR_1)
-			offset = offset;
+		;
+		//offset = offset;
 		else if (sig == OTP_INDICATOR_2)
 			offset += 0x100;
 		else

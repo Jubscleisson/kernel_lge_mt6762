@@ -413,6 +413,22 @@ void dt_to_blob(FILE *f, struct boot_info *bi, int version)
 		fdt.totalsize = cpu_to_fdt32(tsize);
 	}
 
+       // added by LGE
+       // It makes sure that totalsize is 8 byte align.
+       // It is required to include multiple DTBs with lge,pcb_revision.
+#ifdef CONFIG_MACH_LGE
+       {
+               int tsize = fdt32_to_cpu(fdt.totalsize);
+               int newlen = ALIGN(tsize, 8);
+
+               // make sure 8 byte align
+               if (newlen > tsize) {
+                       padlen += (newlen - tsize);
+                       fdt.totalsize = cpu_to_fdt32(newlen);
+               }
+       }
+#endif
+
 	/*
 	 * Assemble the blob: start with the header, add with alignment
 	 * the reserve buffer, add the reserve map terminating zeroes,

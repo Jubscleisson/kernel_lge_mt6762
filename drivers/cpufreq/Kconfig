@@ -381,4 +381,10 @@ config QORIQ_CPUFREQ
 	  which are capable of changing the CPU's frequency dynamically.
 
 endif
+
+config LGE_PM_MTK_POWERTOP
+	bool "This is applied to support powertop.lge"
+	default n
+	help
+	  Support powertop.lge
 endmenu

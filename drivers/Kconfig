@@ -50,6 +50,8 @@ source "drivers/lightnvm/Kconfig"
 
 source "drivers/input/Kconfig"
 
+source "drivers/stylus/Kconfig"
+
 source "drivers/char/Kconfig"
 
 source "drivers/i2c/Kconfig"
@@ -75,6 +77,8 @@ source "drivers/power/Kconfig"
 source "drivers/hwmon/Kconfig"
 
 source "drivers/thermal/Kconfig"
+
+source "drivers/trusty/Kconfig"
 
 source "drivers/watchdog/Kconfig"
 
@@ -203,5 +207,7 @@ source "drivers/hwtracing/intel_th/Kconfig"
 source "drivers/fpga/Kconfig"
 
 source "drivers/tee/Kconfig"
+
+source "drivers/switch/Kconfig"
 
 endmenu

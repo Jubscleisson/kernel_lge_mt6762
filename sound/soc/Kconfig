@@ -73,6 +73,9 @@ source "sound/soc/zte/Kconfig"
 # Supported codecs
 source "sound/soc/codecs/Kconfig"
 
+# Foursemi fs16xx
+source "sound/soc/codecs/foursemi/Kconfig"
+
 # generic frame-work
 source "sound/soc/generic/Kconfig"
 

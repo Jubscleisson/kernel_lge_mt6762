@@ -6,6 +6,12 @@
 #include <linux/wireless.h>
 #include <net/wext.h>
 
+#include <net/patchcodeid.h>
+
+/* 2016-07-14 bongsook.jeong@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [START] */
+#include <net/if_inet6.h>
+#include <net/addrconf.h>
+/* 2016-07-14 bongsook.jeong@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [END] */
 /*
  *	Map an interface index to its name (SIOCGIFNAME)
  */
@@ -138,7 +144,25 @@ static int dev_ifsioc_locked(struct net *net, struct ifreq *ifr, unsigned int cm
 		return 0;
 
 	case SIOCGIFMTU:	/* Get the MTU of a device */
-		ifr->ifr_mtu = dev->mtu;
+		/* 2016-07-14 bongsook.jeong@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [START] */
+		//In the ndsic.c, when set_device_mtu() is excuted,  rtnl_assert is issued, so the below code is added.
+		//ip6_fragment() refer to the in6_dev->cnf.mtu6.
+		//in6_dev_get/in6_dev_put is pair.
+		if ((sysctl_lge_carrier == 45006 || sysctl_lge_carrier == 45005 || sysctl_lge_carrier == 45008) && (strncmp(dev->name, "ccmni", 5) == 0)) {
+			struct inet6_dev *in6_dev = in6_dev_get(dev);
+			patch_code_id("LPCP-1932@y@m@vmlinux@dev_ioctl.c@1");
+			if (in6_dev) {
+				int mtu6 = in6_dev->cnf.mtu6;
+				printk("[hehe] ifr_mtu %d =! mtu6  %d, device %s, \n",ifr->ifr_mtu,mtu6,dev->name);
+				ifr->ifr_mtu = mtu6;
+				in6_dev_put(in6_dev);
+			} else {
+				ifr->ifr_mtu = dev->mtu;
+			}
+		} else
+		/* 2016-07-14 bongsook.jeong@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [END] */
+		ifr->ifr_mtu = dev->mtu; //native
+
 		return 0;
 
 	case SIOCGIFHWADDR:

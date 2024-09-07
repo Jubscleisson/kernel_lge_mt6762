@@ -32,6 +32,7 @@
 
 #include "u_serial.h"
 
+#define ACM_LOG(fmt, args...) pr_notice("USB_ACM " fmt, ## args)
 
 /*
  * This component encapsulates the TTY layer glue needed to provide basic
@@ -510,6 +511,13 @@ static void gs_rx_push(unsigned long _port)
 
 	/* hand any queued data to the tty */
 	spin_lock_irq(&port->port_lock);
+#ifdef CONFIG_LGE_USB_GADGET
+	if (!port->port_usb) {
+		pr_err("Error - port->usb is NULL\n");
+		spin_unlock_irq(&port->port_lock);
+		return;
+	}
+#endif
 	tty = port->port.tty;
 	while (!list_empty(queue)) {
 		struct usb_request	*req;
@@ -537,7 +545,7 @@ static void gs_rx_push(unsigned long _port)
 		}
 
 		/* push data to (open) tty */
-		if (req->actual && tty) {
+		if (req->actual) {
 			char		*packet = req->buf;
 			unsigned	size = req->actual;
 			unsigned	n;
@@ -689,9 +697,21 @@ static int gs_alloc_requests(struct usb_ep *ep, struct list_head *head,
 static int gs_start_io(struct gs_port *port)
 {
 	struct list_head	*head = &port->read_pool;
+#ifdef CONFIG_LGE_USB_GADGET
+	struct usb_ep		*ep;
+#else
 	struct usb_ep		*ep = port->port_usb->out;
+#endif
 	int			status;
 	unsigned		started;
+
+#ifdef CONFIG_LGE_USB_GADGET
+	if (!port->port_usb) {
+		pr_debug("%s: port_usb is NULL\n", __func__);
+		return -ENODEV;
+	}
+	ep = port->port_usb->out;
+#endif
 
 	/* Allocate RX and TX I/O buffers.  We can't easily do this much
 	 * earlier (with GFP_KERNEL) because the requests are coupled to
@@ -715,8 +735,15 @@ static int gs_start_io(struct gs_port *port)
 	port->n_read = 0;
 	started = gs_start_rx(port);
 
+#ifdef CONFIG_LGE_USB_GADGET
+	if (!port->port_usb) {
+		pr_err("%s: port_usb is NULL!\n", __func__);
+		return -EIO;
+	}
+#endif
+
 	/* unblock any pending writes into our circular buffer */
-	if (started) {
+	if (started && port->port.tty) {
 		tty_wakeup(port->port.tty);
 	} else {
 		gs_free_requests(ep, head, &port->read_allocated);
@@ -1025,6 +1052,81 @@ static int gs_break_ctl(struct tty_struct *tty, int duration)
 	return status;
 }
 
+#ifdef CONFIG_LGE_USB_GADGET
+static int gs_tiocmget(struct tty_struct *tty)
+{
+	struct gs_port *port = tty->driver_data;
+	struct gserial *gser;
+	unsigned int result = 0;
+
+	spin_lock_irq(&port->port_lock);
+	gser = port->port_usb;
+	if (!gser) {
+		result = -ENODEV;
+		goto fail;
+	}
+
+	if (gser->get_dtr)
+		result |= (gser->get_dtr(gser) ? TIOCM_DTR : 0);
+	if (gser->get_rts)
+		result |= (gser->get_rts(gser) ? TIOCM_RTS : 0);
+	if (gser->serial_state & TIOCM_CD)
+		result |= TIOCM_CD;
+	if (gser->serial_state & TIOCM_RI)
+		result |= TIOCM_RI;
+
+fail:
+	spin_unlock_irq(&port->port_lock);
+	return result;
+}
+
+static int gs_tiocmset(struct tty_struct *tty, unsigned int set, unsigned int clear)
+{
+	struct gs_port *port = tty->driver_data;
+	struct gserial *gser;
+	int status = 0;
+
+	spin_lock_irq(&port->port_lock);
+	gser = port->port_usb;
+	if (!gser) {
+		status = -ENODEV;
+		goto fail;
+	}
+
+	if (set & TIOCM_RI) {
+		if (gser->send_ring_indicator) {
+			gser->serial_state |= TIOCM_RI;
+			status = gser->send_ring_indicator(gser, 1);
+		}
+	}
+
+	if (clear & TIOCM_RI) {
+		if (gser->send_ring_indicator) {
+			gser->serial_state &= ~TIOCM_RI;
+			status = gser->send_ring_indicator(gser, 0);
+		}
+	}
+
+	if (set & TIOCM_CD) {
+		if (gser->send_carrier_detect) {
+			gser->serial_state |= TIOCM_CD;
+			status = gser->send_carrier_detect(gser, 1);
+		}
+	}
+
+	if (clear & TIOCM_CD) {
+		if (gser->send_carrier_detect) {
+			gser->serial_state &= ~TIOCM_CD;
+			status = gser->send_carrier_detect(gser, 0);
+		}
+	}
+
+fail:
+	spin_unlock_irq(&port->port_lock);
+	return status;
+}
+
+#endif
 static const struct tty_operations gs_tty_ops = {
 	.open =			gs_open,
 	.close =		gs_close,
@@ -1035,6 +1137,10 @@ static const struct tty_operations gs_tty_ops = {
 	.chars_in_buffer =	gs_chars_in_buffer,
 	.unthrottle =		gs_unthrottle,
 	.break_ctl =		gs_break_ctl,
+#ifdef CONFIG_LGE_USB_GADGET
+	.tiocmget = 		gs_tiocmget,
+	.tiocmset =			gs_tiocmset,
+#endif
 };
 
 /*-------------------------------------------------------------------------*/

@@ -58,6 +58,29 @@ void mmc_unregister_host_class(void)
 	class_unregister(&mmc_host_class);
 }
 
+#ifdef CONFIG_MACH_LGE
+static ssize_t cd_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct mmc_host *host = cls_dev_to_mmc_host(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", mmc_gpio_get_cd(host));
+}
+
+
+DEVICE_ATTR(cd_status, S_IRUGO,
+		cd_status_show, NULL);
+
+static inline void mmc_host_cd_status_sysfs_init(struct mmc_host *host)
+{
+
+
+	if (device_create_file(&host->class_dev, &dev_attr_cd_status))
+		pr_err("%s: Failed to create clkgate_delay sysfs entry\n",
+				mmc_hostname(host));
+}
+#endif
+
 void mmc_retune_enable(struct mmc_host *host)
 {
 	host->can_retune = 1;
@@ -321,7 +344,7 @@ int mmc_of_parse(struct mmc_host *host)
 	host->dsr_req = !device_property_read_u32(dev, "dsr", &host->dsr);
 	if (host->dsr_req && (host->dsr & ~0xffff)) {
 		dev_err(host->parent,
-			"device tree specified broken value for DSR: 0x%x, ignoring\n",
+		"device tree specified broken value for DSR: 0x%x, ignoring\n",
 			host->dsr);
 		host->dsr_req = 0;
 	}
@@ -342,6 +365,9 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 {
 	int err;
 	struct mmc_host *host;
+#ifdef CONFIG_MTK_EMMC_CQ_SUPPORT
+	int i;
+#endif
 
 	host = kzalloc(sizeof(struct mmc_host) + extra, GFP_KERNEL);
 	if (!host)
@@ -396,6 +422,24 @@ again:
 	host->max_blk_size = 512;
 	host->max_blk_count = PAGE_SIZE / 512;
 
+#ifdef CONFIG_MTK_EMMC_CQ_SUPPORT
+	for (i = 0; i < EMMC_MAX_QUEUE_DEPTH; i++)
+		host->areq_que[i] = NULL;
+	atomic_set(&host->areq_cnt, 0);
+	host->areq_cur = NULL;
+	host->done_mrq = NULL;
+
+	INIT_LIST_HEAD(&host->cmd_que);
+	INIT_LIST_HEAD(&host->dat_que);
+	spin_lock_init(&host->cmd_que_lock);
+	spin_lock_init(&host->dat_que_lock);
+	spin_lock_init(&host->que_lock);
+
+	init_waitqueue_head(&host->cmp_que);
+	init_waitqueue_head(&host->cmdq_que);
+
+#endif
+
 	return host;
 }
 
@@ -424,6 +468,11 @@ int mmc_add_host(struct mmc_host *host)
 
 #ifdef CONFIG_DEBUG_FS
 	mmc_add_host_debugfs(host);
+#endif
+
+#ifdef CONFIG_MACH_LGE
+	if (!(host->caps & MMC_CAP_NONREMOVABLE))
+		mmc_host_cd_status_sysfs_init(host);
 #endif
 
 #ifdef CONFIG_BLOCK

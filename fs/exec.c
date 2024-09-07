@@ -67,6 +67,12 @@
 
 #include <trace/events/sched.h>
 
+#include <mt-plat/mtk_pidmap.h>
+
+#ifdef CONFIG_LGE_SREADAHEAD
+#include "sreadahead_prof.h"
+#endif
+
 int suid_dumpable = 0;
 
 static LIST_HEAD(formats);
@@ -143,6 +149,10 @@ SYSCALL_DEFINE1(uselib, const char __user *, library)
 		goto exit;
 
 	fsnotify_open(file);
+
+#ifdef CONFIG_LGE_SREADAHEAD
+	sreadahead_prof( file, 0, 0);
+#endif
 
 	error = -ENOEXEC;
 
@@ -852,6 +862,10 @@ static struct file *do_open_execat(int fd, struct filename *name, int flags)
 	if (path_noexec(&file->f_path))
 		goto exit;
 
+#ifdef CONFIG_LGE_SREADAHEAD
+	sreadahead_prof( file, 0, 0);
+#endif
+
 	err = deny_write_access(file);
 	if (err)
 		goto exit;
@@ -1249,6 +1263,7 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
 	task_unlock(tsk);
 	perf_event_comm(tsk, exec);
+	mtk_pidmap_update(tsk);
 }
 
 int flush_old_exec(struct linux_binprm * bprm)

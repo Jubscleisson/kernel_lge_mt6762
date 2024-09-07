@@ -72,6 +72,22 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv6.h>
 
+#include <net/patchcodeid.h>
+
+/* 2016-05-26 shsh.kim@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [START] */
+#include <linux/netdevice.h>
+//UpdateMTU is returned in connectivityservice.java, because MTK is not updated mtu at the fwk layer.
+//The timing issue is occured, updateMTU is called after ndisc.c and then reset the value initial mtu.
+//So block the UpdateMtu about IPv6, we update mtu with this feature.
+#define LGU_DEFULAT_MTU 1400
+#define KT_DEFAULT_MTU 1450
+
+#define LGU_CARRIER 45006
+#define KT_CARRIER 45008
+#define SKT_CARRIER 45005
+
+int sysctl_lge_carrier __read_mostly = 0;
+/* 2016-07-14 bongsook.jeong@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [END] */
 static u32 ndisc_hash(const void *pkey,
 		      const struct net_device *dev,
 		      __u32 *hash_rnd);
@@ -1192,7 +1208,12 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		 */
 		in6_dev->if_flags |= IF_RA_RCVD;
 	}
-
+	if (sysctl_optr == MTK_IPV6_VZW_ALL ||
+	    sysctl_optr == MTK_IPV6_EX_RS_INTERVAL) {
+		/*add for VzW feature : remove IF_RS_VZW_SENT flag*/
+		if (in6_dev->if_flags & IF_RS_VZW_SENT)
+			in6_dev->if_flags &= ~IF_RS_VZW_SENT;
+	}
 	/*
 	 * Remember the managed/otherconf flags from most recently
 	 * received RA message (RFC 2462) -- yoshfuji
@@ -1280,8 +1301,23 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		rt->rt6i_flags = (rt->rt6i_flags & ~RTF_PREF_MASK) | RTF_PREF(pref);
 	}
 
-	if (rt)
-		rt6_set_expires(rt, jiffies + (HZ * lifetime));
+	if (rt) {
+		/*MTK changes
+		 *if route lifetime carried by RA msg equals to 0xFFFF,
+		 *considering it as infinite route lifetime and cleaning
+		 *route expires. Otherwise, setting route expires according
+		 *to the lifetime value.
+		 */
+		if (lifetime == 0xffff) {
+			rt6_clean_expires(rt);
+			pr_info("[mtk_net]RA: %s, rt %p, clean route expires since lifetime %d infinite\n",
+				__func__, rt, lifetime);
+		} else {
+			rt6_set_expires(rt, jiffies + (HZ * lifetime));
+			pr_info("[mtk_net]RA: %s, rt %p, set route expires since lifetime %d finite\n",
+				__func__, rt, lifetime);
+		}
+	}
 	if (in6_dev->cnf.accept_ra_min_hop_limit < 256 &&
 	    ra_msg->icmph.icmp6_hop_limit) {
 		if (in6_dev->cnf.accept_ra_min_hop_limit <= ra_msg->icmph.icmp6_hop_limit) {
@@ -1429,7 +1465,53 @@ skip_routeinfo:
 		}
 	}
 
-	if (ndopts.nd_opts_mtu && in6_dev->cnf.accept_ra_mtu) {
+	/* 2017-02-17 yunsik.lee@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [START] */
+	// printk(KERN_INFO "[LGE_DATA][ipv6] sysctl_lge_carrier = %d in6_dev->cnf.accept_ra_mtu %d,in RD \n", sysctl_lge_carrier,in6_dev->cnf.accept_ra_mtu);
+	if ( (sysctl_lge_carrier == LGU_CARRIER || sysctl_lge_carrier == KT_CARRIER) && (strncmp(skb->dev->name, "ccmni", 5) == 0) ) {
+		if (ndopts.nd_opts_mtu) {
+			__be32 n;
+			u32 mtu;
+			patch_code_id("LPCP-1932@y@m@vmlinux@ndisc.c@1");
+			memcpy(&n, ((u8 *)(ndopts.nd_opts_mtu+1))+2, sizeof(mtu));
+			mtu = ntohl(n);
+			printk(KERN_INFO "[LGE_DATA][ipv6] mtu = %d / dev->mtu = %d, device %s,in6_dev->cnf.mtu6 %d,\n", mtu, skb->dev->mtu,skb->dev->name,in6_dev->cnf.mtu6);
+
+			if (mtu < IPV6_MIN_MTU) {
+				ND_PRINTK(2, warn, "RA: invalid mtu: %d, update with default MTU for U+ and KT\n", mtu);
+				if (sysctl_lge_carrier == LGU_CARRIER) {
+					in6_dev->cnf.mtu6 = LGU_DEFULAT_MTU;
+				} else if (sysctl_lge_carrier == KT_CARRIER) {
+					in6_dev->cnf.mtu6 = KT_DEFAULT_MTU;
+				}
+				if (rt) {
+					dst_metric_set(&rt->dst, RTAX_MTU, in6_dev->cnf.mtu6);
+				}
+				rt6_mtu_change(skb->dev, in6_dev->cnf.mtu6);
+			} else if (in6_dev->cnf.mtu6 != mtu) {
+				// printk(KERN_INFO "[LGE_DATA][ipv6] mtu = %d, in6_dev->cnf.mtu6 %d, update here\n", mtu,in6_dev->cnf.mtu6);
+				in6_dev->cnf.mtu6 = mtu;
+
+				if (rt) {
+					dst_metric_set(&rt->dst, RTAX_MTU, mtu);
+				}
+
+				rt6_mtu_change(skb->dev, mtu);
+			}
+		} else {
+			//printk(KERN_INFO "[LGE_DATA][ipv6] mtu is not in RA, so set default value, device %s,\n",skb->dev->name);
+			if (sysctl_lge_carrier == LGU_CARRIER) {
+				in6_dev->cnf.mtu6 = LGU_DEFULAT_MTU;
+			} else if (sysctl_lge_carrier == KT_CARRIER) {
+				in6_dev->cnf.mtu6 = KT_DEFAULT_MTU;
+			}
+			if (rt) {
+				dst_metric_set(&rt->dst, RTAX_MTU, in6_dev->cnf.mtu6);
+			}
+			rt6_mtu_change(skb->dev, in6_dev->cnf.mtu6);
+		}
+	}
+	/* 2017-02-17 yunsik.lee@lge.com LGP_DATA_TCPIP_IPV6_MTU_MTK [END] */
+	else if (ndopts.nd_opts_mtu && in6_dev->cnf.accept_ra_mtu) {
 		__be32 n;
 		u32 mtu;
 

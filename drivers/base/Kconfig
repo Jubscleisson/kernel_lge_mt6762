@@ -246,6 +246,7 @@ source "drivers/base/regmap/Kconfig"
 config DMA_SHARED_BUFFER
 	bool
 	default n
+	select ANON_INODES
 	help
 	  This option enables the framework for buffer-sharing between
 	  multiple drivers. A buffer is associated with a file using driver
@@ -337,5 +338,13 @@ config CMA_ALIGNMENT
 	  If unsure, leave the default value "8".
 
 endif
+
+config SCHED_MIGRATION_COST_POLICY_GRADIENT
+	bool "set SCHED_MIGRATION_COST by policy gradient"
+	depends on ARTIFICIAL_NEURAL_NETWORK
+	default n
+	help
+	  Use the policy gradient to set SCHED_MIGRATION_COST.
+	  This scheme optimizes performance of process scheduling.
 
 endmenu

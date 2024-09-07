@@ -51,6 +51,10 @@
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
 
+#if defined(CONFIG_LGE_HANDLE_PANIC)
+#include <soc/mediatek/lge/lge_handle_panic.h>
+#endif
+
 /* Whether we react on sysrq keys or just ignore them */
 static int __read_mostly sysrq_enabled = CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE;
 static bool __read_mostly sysrq_always_enabled;
@@ -152,6 +156,9 @@ static struct sysrq_key_op sysrq_crash_op = {
 
 static void sysrq_handle_reboot(int key)
 {
+#if defined(CONFIG_LGE_HANDLE_PANIC)
+	lge_set_reboot_reason(LGE_REBOOT_REASON_NORMAL);
+#endif
 	lockdep_off();
 	local_irq_enable();
 	emergency_restart();

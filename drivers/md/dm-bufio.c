@@ -345,8 +345,8 @@ static void __cache_size_refresh(void)
 		dm_bufio_cache_size_latch = dm_bufio_default_cache_size;
 	}
 
-	dm_bufio_cache_size_per_client = dm_bufio_cache_size_latch /
-					 (dm_bufio_client_count ? : 1);
+	dm_bufio_cache_size_per_client = max((unsigned long) CONFIG_DM_BUFIO_CACHE_SIZE_PER_CLIENT,
+					dm_bufio_cache_size_latch / (dm_bufio_client_count ? : 1));
 }
 
 /*

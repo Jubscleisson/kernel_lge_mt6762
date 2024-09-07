@@ -22,17 +22,33 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/swap.h>
+#include <linux/llist.h>
 #include "ion_priv.h"
 
+static unsigned long long last_alloc_ts;
 static void *ion_page_pool_alloc_pages(struct ion_page_pool *pool)
 {
-	struct page *page = alloc_pages(pool->gfp_mask, pool->order);
+	unsigned long long start, end;
+	struct page *page;
+
+	start = sched_clock();
+	page = alloc_pages(pool->gfp_mask, pool->order);
+	end = sched_clock();
+
+	if ((end - start > 10000000ULL) &&
+	    (end - last_alloc_ts > 1000000000ULL)) { /* unit is ns, 1s */
+		IONMSG("warn: alloc pages order: %d time: %lld ns\n",
+		       pool->order, end - start);
+		show_free_areas(0);
+		last_alloc_ts = end;
+	}
 
 	if (!page)
 		return NULL;
-	if (!pool->cached)
-		ion_pages_sync_for_device(NULL, page, PAGE_SIZE << pool->order,
-					  DMA_BIDIRECTIONAL);
+	ion_pages_sync_for_device(g_ion_device->dev.this_device,
+				  page, PAGE_SIZE << pool->order,
+				  DMA_BIDIRECTIONAL);
+	atomic64_add_return((1 << pool->order), &page_sz_cnt);
 	return page;
 }
 
@@ -40,37 +56,46 @@ static void ion_page_pool_free_pages(struct ion_page_pool *pool,
 				     struct page *page)
 {
 	__free_pages(page, pool->order);
+	if (atomic64_sub_return((1 << pool->order), &page_sz_cnt) < 0) {
+		IONMSG("underflow!, total_now[0x%llx]free[%d]\n",
+		       (u64)atomic64_read(&page_sz_cnt),
+		       (int)(1 << pool->order));
+		atomic64_set(&page_sz_cnt, 0);
+	}
 }
 
 static int ion_page_pool_add(struct ion_page_pool *pool, struct page *page)
 {
-	mutex_lock(&pool->mutex);
 	if (PageHighMem(page)) {
-		list_add_tail(&page->lru, &pool->high_items);
-		pool->high_count++;
+		llist_add((struct llist_node *)&page->lru, &pool->high_items);
+		atomic_inc(&pool->high_count);
 	} else {
-		list_add_tail(&page->lru, &pool->low_items);
-		pool->low_count++;
+		llist_add((struct llist_node *)&page->lru, &pool->low_items);
+		atomic_inc(&pool->low_count);
 	}
-	mutex_unlock(&pool->mutex);
+
 	return 0;
 }
 
 static struct page *ion_page_pool_remove(struct ion_page_pool *pool, bool high)
 {
-	struct page *page;
+	struct page *page = NULL;
+	struct llist_node *ret;
 
 	if (high) {
-		BUG_ON(!pool->high_count);
-		page = list_first_entry(&pool->high_items, struct page, lru);
-		pool->high_count--;
+		BUG_ON(!atomic_read(&pool->high_count));
+		ret = llist_del_first(&pool->high_items);
+		if (ret)
+			page = llist_entry((struct list_head *)ret, struct page, lru);
+		atomic_dec(&pool->high_count);
 	} else {
-		BUG_ON(!pool->low_count);
-		page = list_first_entry(&pool->low_items, struct page, lru);
-		pool->low_count--;
+		BUG_ON(!atomic_read(&pool->low_count));
+		ret = llist_del_first(&pool->low_items);
+		if (ret)
+			page = llist_entry((struct list_head *)ret, struct page, lru);
+		atomic_dec(&pool->low_count);
 	}
 
-	list_del(&page->lru);
 	return page;
 }
 
@@ -81,14 +106,24 @@ struct page *ion_page_pool_alloc(struct ion_page_pool *pool)
 	BUG_ON(!pool);
 
 	mutex_lock(&pool->mutex);
-	if (pool->high_count)
+	if (atomic_read(&pool->high_count))
 		page = ion_page_pool_remove(pool, true);
-	else if (pool->low_count)
+	else if (atomic_read(&pool->low_count))
 		page = ion_page_pool_remove(pool, false);
 	mutex_unlock(&pool->mutex);
 
 	if (!page)
+#ifdef CONFIG_MIGRATE_HIGHORDER
+	{
+		if (pool->order > 1 &&
+				(global_page_state(NR_FREE_HIGHORDER_PAGES)
+				 < ((1 << pool->order) * 2)))
+			return page;
+#endif
 		page = ion_page_pool_alloc_pages(pool);
+#ifdef CONFIG_MIGRATE_HIGHORDER
+	}
+#endif
 
 	return page;
 }
@@ -96,6 +131,10 @@ struct page *ion_page_pool_alloc(struct ion_page_pool *pool)
 void ion_page_pool_free(struct ion_page_pool *pool, struct page *page)
 {
 	int ret;
+
+	if (pool->order != compound_order(page))
+		IONMSG("free page = 0x%p, compound_order(page) = 0x%x",
+		       page, compound_order(page));
 
 	BUG_ON(pool->order != compound_order(page));
 
@@ -106,10 +145,10 @@ void ion_page_pool_free(struct ion_page_pool *pool, struct page *page)
 
 static int ion_page_pool_total(struct ion_page_pool *pool, bool high)
 {
-	int count = pool->low_count;
+	int count = atomic_read(&pool->low_count);
 
 	if (high)
-		count += pool->high_count;
+		count += atomic_read(&pool->high_count);
 
 	return count << pool->order;
 }
@@ -132,9 +171,9 @@ int ion_page_pool_shrink(struct ion_page_pool *pool, gfp_t gfp_mask,
 		struct page *page;
 
 		mutex_lock(&pool->mutex);
-		if (pool->low_count) {
+		if (atomic_read(&pool->low_count)) {
 			page = ion_page_pool_remove(pool, false);
-		} else if (high && pool->high_count) {
+		} else if (high && atomic_read(&pool->high_count)) {
 			page = ion_page_pool_remove(pool, true);
 		} else {
 			mutex_unlock(&pool->mutex);
@@ -153,12 +192,14 @@ struct ion_page_pool *ion_page_pool_create(gfp_t gfp_mask, unsigned int order,
 {
 	struct ion_page_pool *pool = kmalloc(sizeof(*pool), GFP_KERNEL);
 
-	if (!pool)
+	if (!pool) {
+		IONMSG("%s kmalloc failed pool is null.\n", __func__);
 		return NULL;
-	pool->high_count = 0;
-	pool->low_count = 0;
-	INIT_LIST_HEAD(&pool->low_items);
-	INIT_LIST_HEAD(&pool->high_items);
+	}
+	atomic_set(&pool->high_count, 0);
+	atomic_set(&pool->low_count, 0);
+	init_llist_head(&pool->low_items);
+	init_llist_head(&pool->high_items);
 	pool->gfp_mask = gfp_mask | __GFP_COMP;
 	pool->order = order;
 	mutex_init(&pool->mutex);

@@ -28,6 +28,8 @@
 #include <net/tcp.h>
 #include <net/sock_reuseport.h>
 
+#include <net/patchcodeid.h>
+
 static u32 inet_ehashfn(const struct net *net, const __be32 laddr,
 			const __u16 lport, const __be32 faddr,
 			const __be16 fport)
@@ -114,10 +116,20 @@ static void __inet_put_port(struct sock *sk)
 	spin_lock(&head->lock);
 	tb = inet_csk(sk)->icsk_bind_hash;
 	__sk_del_bind_node(sk);
+	/* 2015-08-13 jewon.lee@lge.com LGP_DATA_KERNEL_CRASHFIX_TCP_NUKE_ADDR [START] */
+	patch_code_id("LPCP-1297@n@c@vmlinux@inet_hashtables.c@1");
+	if (tb) {
+	/* 2015-08-13 jewon.lee@lge.com LGP_DATA_KERNEL_CRASHFIX_TCP_NUKE_ADDR [END] */
 	tb->num_owners--;
+	}  // 2015-08-13 jewon.lee@lge.com LGP_DATA_KERNEL_CRASHFIX_TCP_NUKE_ADDR
 	inet_csk(sk)->icsk_bind_hash = NULL;
 	inet_sk(sk)->inet_num = 0;
+	/* 2015-08-13 jewon.lee@lge.com LGP_DATA_KERNEL_CRASHFIX_TCP_NUKE_ADDR [START] */
+	if (tb) {
+	patch_code_id("LPCP-1297@n@c@vmlinux@inet_hashtables.c@2");
+	/* 2015-08-13 jewon.lee@lge.com LGP_DATA_KERNEL_CRASHFIX_TCP_NUKE_ADDR [END] */
 	inet_bind_bucket_destroy(hashinfo->bind_bucket_cachep, tb);
+	}  // 2015-08-13 jewon.lee@lge.com LGP_DATA_KERNEL_CRASHFIX_TCP_NUKE_ADDR
 	spin_unlock(&head->lock);
 }
 

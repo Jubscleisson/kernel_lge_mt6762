@@ -224,7 +224,7 @@ config ZLIB_INFLATE
 	tristate
 
 config ZLIB_DEFLATE
-	tristate
+	tristate "ZLIB_DEFLATE function"
 	select BITREVERSE
 
 config LZO_COMPRESS
@@ -560,5 +560,11 @@ config STACKDEPOT
 
 config SBITMAP
 	bool
+
+config ARTIFICIAL_NEURAL_NETWORK
+	bool "Support artificial neural network function"
+	default n
+	help
+	 Provides artificial neural network function.
 
 endmenu
